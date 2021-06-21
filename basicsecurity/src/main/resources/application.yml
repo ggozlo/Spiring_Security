@@ -1,2 +1,10 @@
 server:
   port: 8282
+
+
+spring:
+  security:
+    user:
+      name: user
+      password: 1234
+      # 시큐리티의 기본 생성 사용자를 설정, 디폴트는 user에 패스워드는 콘솔창에 랜덤 문자열
