@@ -1,11 +1,13 @@
 package security.basicsecurity.Configure;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.logout.LogoutHandler;
@@ -24,17 +26,38 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     // 세부적 보안기능을 설정할수 있는 API 인 HttpSecurity를 제공한다.
 
 
+    UserDetailsService userDetailsService;
+    @Autowired
+    public void setUserDetailsService(UserDetailsService userDetailsService) {
+        this.userDetailsService = userDetailsService;
+    }
+
     @Override // 보안 기능을 설정하는 configure 레이션을 재정의 하여 설정, 재정의 안하면 기본 설정으로 동작
     protected void configure(HttpSecurity http) throws Exception {
+
+        //filterApi(http);
+        http
+                .authorizeRequests()
+                .anyRequest().authenticated()
+        .and()
+                .formLogin()
+        .and()
+                .rememberMe()
+                .userDetailsService(userDetailsService)
+        ;
+    }
+
+
+
+    private void filterApi(HttpSecurity http) throws Exception {
         http // 인가정책 설정 - 기능에 대하여 접근이 가능한지를 판별
                 .authorizeRequests() // 요청에 대한 보안검사 (권한 검사 실시) ( 동작조건 )
                 .anyRequest() // 모든 요청에 대하여 실행 ( 필터조건 )
                 .authenticated() // 인증을 받아야함 ( 필요조건 )
-        ;
-
+//----------------------------------------------------------------------------------------------------------------------
         // LoginFilter
-        http // 인증정책 설정 - 기능에 접근이 가능한지를 검증
-                .formLogin() // 폼 로그인 으로 설정
+        .and() // 인증정책 설정 - 기능에 접근이 가능한지를 검증, and() 메서드 - HttpSecurity 인스턴스에 대하여 체이닝 방식으로 여러가지지 설정 가능
+               .formLogin() // 폼 로그인 으로 설정
                 //.loginPage("/loginPage") // 사용자 정의 로그인 페이지 미설정시 스프링 기본 로그인 페이지 제공
                 .defaultSuccessUrl("/") // 로그인 성공페이지
                 .failureUrl("/login") // 실패 페이지
@@ -60,10 +83,9 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                     }
                 }) // 로그인 실패시 설정된 핸들러 호출
                 .permitAll() // 로그인 페이지에 대해서는 모든 사용자가 접근이 가능하도록 허용함
-        ;
-
+//----------------------------------------------------------------------------------------------------------------------
         // LogoutFilter
-        http
+        .and()
                 .logout() // 로그아웃 필터 설정용 메서드
                 .logoutUrl("/logout") // 로그아웃이 호출될 url 패턴, 스프링 시큐리티는 기본적으로는 Post 방식으로만 가능
                 .logoutSuccessUrl("/login") // 로그아웃이 성공하면 이동할 페이지
@@ -83,6 +105,15 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                         response.sendRedirect("/login");
                     }
                 }) // 로그아웃 성공시에 호출될 핸들러
-                .deleteCookies("remember-me"); // 발급된 쿠키명을 변수로 넣어서 로그아웃시 발급된 쿠키를 삭제
+                .deleteCookies("remember-me") // 발급된 쿠키명을 변수로 넣어서 로그아웃시 발급된 쿠키를 삭제
+
+//----------------------------------------------------------------------------------------------------------------------
+        .and()
+                .rememberMe() // RememberMe - 인증 세션이 만료, 종료된 이후에도 인증 정보를 쿠키로 남기며 바로 인증받을수 있다.
+                .rememberMeParameter("remember") // UI 에서 전달되는 RememberMe 파라미터 name 을 설정가능
+                .tokenValiditySeconds(3600) // 발급된 인증서, 쿠키의 유효시간을 초단위 지정, 기본은 14일
+                .userDetailsService(userDetailsService) // remember-Me 의 인증정보와 대조하기 위해 계정들을 조회하는 기능 수행 (필수)
+                //.alwaysRemember(true) // rememberMe 기능을 언제나 활성화 시킨다
+        ;
     }
 }
