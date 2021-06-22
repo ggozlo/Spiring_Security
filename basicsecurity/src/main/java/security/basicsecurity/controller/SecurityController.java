@@ -16,4 +16,9 @@ public class SecurityController {
     // 인증방식은 폼 로그인, httpBasic 로그인 방식
     // 기본 로그인 페이지 제공
     // 기본 계정 한개 제공 - id : user , pw : 랜덤 문자열
+
+    @GetMapping("/loginPage")
+    public String loginPage() {
+        return "loginPage";
+    }
 }
