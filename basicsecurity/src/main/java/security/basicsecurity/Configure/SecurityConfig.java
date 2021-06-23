@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -42,8 +43,26 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         .and()
                 .formLogin()
         .and()
-                .rememberMe()
-                .userDetailsService(userDetailsService)
+                .sessionManagement() // 사큐리티 세션 관리를 위한 api
+                .sessionCreationPolicy( // 세션 생성전략의 설정
+                        //SessionCreationPolicy.ALWAYS // 시큐리티가 HttpSession 을 항상 행성
+                        SessionCreationPolicy.IF_REQUIRED // 시큐리티가 세션이 필요할 때만 생성, 기본값
+                        //SessionCreationPolicy.NEVER // 시큐리티가 세션을 생성하지 않음 하지만 이미 있다면 사용
+                        //SessionCreationPolicy.STATELESS
+                        // 시큐리티가 세션을 생성하지도, 존재하는 걸 사용하지도 않음 JWT 같은 방식에서 사용
+                        // 정확히는 스프링 시큐리티가 인증방식에 세션쿠키 방식을 사용하지 않음
+                )
+                .sessionFixation() // 고정세션 공격에 대한 방어전략 제공
+                    .changeSessionId() // 기본값, 이전새션을 재사용 가능하며 세션에 새로운 세션 ID를 부여
+                    //.migrateSession() // 서블릿 3.1 이전 방어용 전략
+                    //.newSession() // 아예 새로운 새션을 지급하여 세션을 교체, 이전세션은 폐기
+                    //.none() // 권한 인증을 하여도 세션이 변하지 않음, 공격자가 해당 세션 ID를 안다면 침투 가능
+                .invalidSessionUrl("/") // 세션이 유효하지 않은 경우 redirect 시킬 url 을 설정, expiredUrl() 보다 우선
+                .maximumSessions(1) // 계정이 동시에 가질수 있는 최대 세션의 수, -1은 제한없음
+                .maxSessionsPreventsLogin(false)
+        // 세션 멕시멈이 초과시 대응 전략, default 는 false - 인증 차단, true - 기존 인증 해지
+                .expiredUrl("/login") // 세션 만료시 이동 URL 지정
+
         ;
     }
 
