@@ -2,6 +2,7 @@ package security.basicsecurity.Configure;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -10,10 +11,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.SavedRequest;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -34,22 +39,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         this.userDetailsService = userDetailsService;
     }
 
-    @Override // 웹 보안 기능을 설정하는 configure(HttpSecurity) 메서드를 재정의 하여 설정, 재정의 안하면 기본 설정으로 동작
-    protected void configure(HttpSecurity http) throws Exception {
-        http
-                // 권한 인가는 Top-Down 방식으로 이루어 진다 그래서 아래로 갈수록 넓은 범위의 인가조건으로 정렬해야 한다.
-                //.antMatcher() // 조건에 맞는 요청만 보안 검사를 실시
-                .authorizeRequests() // 권한검사 api 메서드
-                .antMatchers("/user").hasRole("USER")
-                // 조건에 맞는 패턴에 대하여 특정 권한을 가진 계정만 인가함
-                .antMatchers("/admin/pay").hasRole("ADMIN") // 경로와 권한으로 인가
-                .antMatchers("/admin/**").access("hasRole('ADMIN') or hasRole('SYS')") // spel
-                // /admin 을 포함한 모든 하위 조건에 대하여 조건식으로 인가함
-                .anyRequest().authenticated()
-        .and().formLogin() // 인증방식은 폼 로그인
-        ;
-    }
-
     @Override // 사용자의 생성, 권한부여 설정 기능 제공
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
         auth.inMemoryAuthentication().withUser("user").password("{noop}1234").roles("USER");
@@ -60,6 +49,79 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         // 패스워드, prefix 형태로 암호화 정보를 명시 {noop}은 평문
         // 권한 설정
     }
+
+    @Override // 웹 보안 기능을 설정하는 configure(HttpSecurity) 메서드를 재정의 하여 설정, 재정의 안하면 기본 설정으로 동작
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+                .authorizeRequests()
+                .anyRequest()
+                .permitAll()
+            .and()
+                .formLogin()
+            .and()
+                .csrf()// 사이트간 요청 위조 방지를 위한 csrf 토큰을 발급함 기본은 활성화, 토큰은 이름, 내용으로 구성
+                .disable() // disable 옵션을 통해 비활성화 가능
+        ;
+
+    }
+
+
+
+
+
+
+
+    private void authorizeApi(HttpSecurity http) throws Exception {
+        http
+                // 권한 인가는 Top-Down 방식으로 이루어 진다 그래서 아래로 갈수록 넓은 범위의 인가조건으로 정렬해야 한다.
+                //.antMatcher() // 조건에 맞는 요청만 보안 검사를 실시
+                .authorizeRequests() // 권한검사 api 메서드
+                .antMatchers("/login").permitAll()
+                .antMatchers("/user").hasRole("USER")
+                // 조건에 맞는 패턴에 대하여 특정 권한을 가진 계정만 인가함
+                .antMatchers("/admin/pay").hasRole("ADMIN") // 경로와 권한으로 인가
+                .antMatchers("/admin/**").access("hasRole('ADMIN') or hasRole('SYS')") // spel
+                // /admin 을 포함한 모든 하위 조건에 대하여 조건식으로 인가함
+                .anyRequest().authenticated()
+        .and()
+                .formLogin() // 인증방식은 폼 로그인
+                .successHandler(new AuthenticationSuccessHandler() {
+                    @Override
+                    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
+                                                        Authentication auth) throws IOException, ServletException {
+                        HttpSessionRequestCache requestCache = new HttpSessionRequestCache();
+                        SavedRequest savedRequest = requestCache.getRequest(request, response);
+                        // 인증 차단당시 RequestCache 에 저장되었던 요청정보들을 다시 가져옴
+                        String redirectUrl = savedRequest.getRedirectUrl(); // 요청 정보중 url 주소를 추출
+                        response.sendRedirect(redirectUrl); // 이전의 요청 정보로 다시 이동
+                    }
+                })
+        .and()
+                .exceptionHandling()
+                 //인증, 인가 오류가 발생시 오류 ExceptionTranslator 를 통해 변환, Handler를 통해 처리됨, 핸들러를 직접 정의 가능
+                    .authenticationEntryPoint(new AuthenticationEntryPoint() {  // 인증오류가 발생했을때의 핸들러 지점, 익명클래스로 핸들러 정의
+                        @Override
+                        public void commence(HttpServletRequest httpServletRequest,
+                                             HttpServletResponse httpServletResponse, AuthenticationException e)
+                                throws IOException, ServletException {
+                            httpServletResponse.sendRedirect("/login");
+                        }
+                    })
+                    .accessDeniedHandler(new AccessDeniedHandler() { // 인가예외 발생시의 핸들러 정의
+                        @Override
+                        public void handle(HttpServletRequest request, HttpServletResponse response,
+                                           AccessDeniedException e) throws IOException, ServletException {
+                            response.sendRedirect("/denied");
+                        }
+                    })
+        .and()
+                .csrf() // 사이트간 요청 위조 방지 토큰 발급 (기본)
+                //.disable() // 비활성화 가능
+        ;
+        ;
+    }
+
+
 
     private void authenticationApi(HttpSecurity http) throws Exception {
         http // 인가정책 설정 - 기능에 대하여 접근이 가능한지를 판별
